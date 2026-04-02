@@ -1,9 +1,11 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import { lessons } from '@/data/lessons';
 import { Phoneme } from '@/data/types';
 import { useSpeech } from '@/hooks/useSpeech';
 import { useProgress } from '@/hooks/useProgress';
+import { BASIC_VOWEL_IDS, areBasicVowelsMastered, isVowelMastered } from '@/lib/storage';
 
 type Mode = 'select' | 'practice' | 'result';
 type PracticeType = 'sound' | 'word';
@@ -75,6 +77,9 @@ export default function PracticePage() {
     return scores?.length ? scores[scores.length - 1] : null;
   };
 
+  const vowelsMastered = progress ? areBasicVowelsMastered(progress) : false;
+  const isBasicVowel = (id: string) => (BASIC_VOWEL_IDS as readonly string[]).includes(id);
+
   // ── Practice screen ──────────────────────────────────────────────────────────
   if (mode === 'practice' && selectedPhoneme) {
     return (
@@ -112,6 +117,20 @@ export default function PracticePage() {
             💬 單詞練習
           </button>
         </div>
+
+        {/* Vowel mastery warning */}
+        {practiceType === 'word' && !vowelsMastered && !isBasicVowel(selectedPhoneme.id) && (
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 flex gap-2 text-sm text-orange-800">
+            <span>⚠️</span>
+            <div>
+              <span className="font-medium">建議先完成基礎母音單音練習</span>
+              <span className="text-orange-600">（A、E、I、O、U 各練習至少 2 次，平均分達 70）</span>
+              <Link href="/practice" onClick={() => setMode('select')} className="block mt-1 text-orange-700 underline text-xs">
+                前往練習基礎母音 →
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Phoneme header */}
         <div className="bg-blue-600 text-white rounded-2xl p-5 text-center">
@@ -294,6 +313,35 @@ export default function PracticePage() {
         <p className="text-gray-500 mt-1">選擇一個音素開始練習，新手建議從「單音練習」開始</p>
       </div>
 
+      {/* Vowel mastery status banner */}
+      {!vowelsMastered ? (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span>🎯</span>
+            <span className="font-semibold text-orange-800 text-sm">先掌握基礎母音發音</span>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {BASIC_VOWEL_IDS.map((id) => {
+              const mastered = progress ? isVowelMastered(progress, id) : false;
+              const count = getPracticeCount(id);
+              return (
+                <span key={id} className={`px-3 py-1 rounded-full text-sm font-bold ${
+                  mastered ? 'bg-green-100 text-green-700' : count > 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {mastered ? '✓' : count > 0 ? '…' : '○'} {id}
+                </span>
+              );
+            })}
+          </div>
+          <p className="text-xs text-orange-600 mt-2">每個母音單音練習 2 次、平均分 ≥ 70 即達標</p>
+        </div>
+      ) : (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-2 text-sm text-green-800">
+          <span>✅</span>
+          <span className="font-medium">基礎母音已掌握！可以開始練習單詞了。</span>
+        </div>
+      )}
+
       {/* Beginner tip */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex gap-2 text-sm text-blue-800">
         <span className="text-lg">💡</span>
@@ -339,8 +387,14 @@ export default function PracticePage() {
                   {phoneme.symbol}
                 </span>
                 <div className="flex items-center gap-1">
-                  {isNew && (
-                    <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-medium">新</span>
+                  {isBasicVowel(phoneme.id) && !vowelsMastered && progress && !isVowelMastered(progress, phoneme.id) && (
+                    <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-medium">先練這個</span>
+                  )}
+                  {isBasicVowel(phoneme.id) && progress && isVowelMastered(progress, phoneme.id) && (
+                    <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full font-medium">✓ 已掌握</span>
+                  )}
+                  {isNew && !isBasicVowel(phoneme.id) && (
+                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">新</span>
                   )}
                   {lastScore !== null && <ScoreBadge score={lastScore} />}
                 </div>

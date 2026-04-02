@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useProgress } from '@/hooks/useProgress';
 import DailyGoalCard from '@/components/DailyGoalCard';
 import { lessons } from '@/data/lessons';
+import { BASIC_VOWEL_IDS, areBasicVowelsMastered, isVowelMastered } from '@/lib/storage';
 
 const categoryIcons: Record<string, string> = {
   alphabet: '🔤',
@@ -34,6 +35,8 @@ export default function HomePage() {
   const nextLesson = lessons.find((l) => !completedLessons.includes(l.id));
   const completedCount = completedLessons.length;
 
+  const vowelsMastered = progress ? areBasicVowelsMastered(progress) : false;
+
   return (
     <div className="space-y-6">
       {/* Hero */}
@@ -63,6 +66,45 @@ export default function HomePage() {
 
       {/* Daily Goal */}
       <DailyGoalCard />
+
+      {/* Vowel mastery tracker */}
+      <div className={`rounded-2xl p-4 border ${vowelsMastered ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="font-bold text-gray-800 text-sm">
+              {vowelsMastered ? '✅ 基礎母音已掌握！' : '🎯 第一步：掌握基礎母音'}
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {vowelsMastered ? '可以開始練習完整單詞了' : '先練好 A E I O U 的單音，再練單詞'}
+            </p>
+          </div>
+          {!vowelsMastered && (
+            <Link href="/practice" className="text-xs bg-orange-500 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-orange-600 transition-colors">
+              去練習
+            </Link>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {BASIC_VOWEL_IDS.map((id) => {
+            const mastered = progress ? isVowelMastered(progress, id) : false;
+            const count = progress?.practicedPhonemes[id] ?? 0;
+            const scores = progress?.practiceScores[id] ?? [];
+            const avg = scores.length ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : 0;
+            return (
+              <div key={id} className={`flex-1 rounded-xl p-2 text-center border ${
+                mastered ? 'bg-green-100 border-green-200' : count > 0 ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-gray-200'
+              }`}>
+                <div className={`text-lg font-bold ${mastered ? 'text-green-600' : count > 0 ? 'text-yellow-600' : 'text-gray-400'}`}>
+                  {id}
+                </div>
+                <div className="text-xs mt-0.5">
+                  {mastered ? <span className="text-green-600">✓</span> : count > 0 ? <span className="text-yellow-600">{avg}分</span> : <span className="text-gray-300">—</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Continue / Start */}
       {nextLesson && (
