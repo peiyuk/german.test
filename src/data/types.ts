@@ -12,6 +12,7 @@ export interface Phoneme {
   tip: string;
   examples: PhonemeExample[];
   audioHint: string; // English approximation
+  soundSample: string; // Minimal sound for single-phoneme practice (e.g. "a", "ei", "ach")
 }
 
 export interface Lesson {

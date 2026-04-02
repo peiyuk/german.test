@@ -1,11 +1,12 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { lessons } from '@/data/lessons';
 import { Phoneme } from '@/data/types';
 import { useSpeech } from '@/hooks/useSpeech';
 import { useProgress } from '@/hooks/useProgress';
 
 type Mode = 'select' | 'practice' | 'result';
+type PracticeType = 'sound' | 'word';
 
 const allPhonemes = lessons.flatMap((l) =>
   l.phonemes.map((p) => ({ ...p, lessonTitle: l.title }))
@@ -19,33 +20,39 @@ function ScoreBadge({ score }: { score: number }) {
 export default function PracticePage() {
   const [mode, setMode] = useState<Mode>('select');
   const [selectedPhoneme, setSelectedPhoneme] = useState<(Phoneme & { lessonTitle: string }) | null>(null);
+  const [practiceType, setPracticeType] = useState<PracticeType>('sound');
   const [wordIndex, setWordIndex] = useState(0);
-  const [sessionScores, setSessionScores] = useState<{ word: string; score: number; heard: string }[]>([]);
+  const [sessionScores, setSessionScores] = useState<{ target: string; score: number; heard: string }[]>([]);
   const [filter, setFilter] = useState<string>('all');
 
   const { speak, startListening, stopListening, state, transcript, error, clearTranscript, similarityScore, ttsSupported, sttSupported } = useSpeech();
   const { addPracticeScore, progress } = useProgress();
 
   const targetWord = selectedPhoneme?.examples[wordIndex % selectedPhoneme.examples.length];
+  // In sound mode, target is the soundSample; in word mode, target is the example word
+  const currentTarget = practiceType === 'sound' ? selectedPhoneme?.soundSample ?? '' : (targetWord?.word ?? '');
 
   const handleSelectPhoneme = (phoneme: Phoneme & { lessonTitle: string }) => {
     setSelectedPhoneme(phoneme);
     setWordIndex(0);
     setSessionScores([]);
     clearTranscript();
+    // Default to sound mode for first-time practicers, word mode for experienced
+    const count = progress?.practicedPhonemes[phoneme.id] ?? 0;
+    setPracticeType(count === 0 ? 'sound' : 'word');
     setMode('practice');
   };
 
   const handleEvaluate = () => {
-    if (!targetWord || !transcript) return;
-    const score = similarityScore(targetWord.word, transcript);
+    if (!currentTarget || !transcript) return;
+    const score = similarityScore(currentTarget, transcript);
     addPracticeScore(selectedPhoneme!.id, score);
-    setSessionScores((prev) => [...prev, { word: targetWord.word, score, heard: transcript }]);
+    setSessionScores((prev) => [...prev, { target: currentTarget, score, heard: transcript }]);
     setMode('result');
   };
 
   const handleNext = () => {
-    setWordIndex((i) => i + 1);
+    if (practiceType === 'word') setWordIndex((i) => i + 1);
     clearTranscript();
     setMode('practice');
   };
@@ -62,23 +69,48 @@ export default function PracticePage() {
     ? Math.round(sessionScores.reduce((s, r) => s + r.score, 0) / sessionScores.length)
     : null;
 
-  const getPracticeCount = (phonemeId: string) =>
-    progress?.practicedPhonemes[phonemeId] ?? 0;
+  const getPracticeCount = (phonemeId: string) => progress?.practicedPhonemes[phonemeId] ?? 0;
   const getLastScore = (phonemeId: string) => {
     const scores = progress?.practiceScores[phonemeId];
     return scores?.length ? scores[scores.length - 1] : null;
   };
 
-  if (mode === 'practice' && selectedPhoneme && targetWord) {
+  // ── Practice screen ──────────────────────────────────────────────────────────
+  if (mode === 'practice' && selectedPhoneme) {
     return (
-      <div className="max-w-md mx-auto space-y-5">
+      <div className="max-w-md mx-auto space-y-4">
+        {/* Top bar */}
         <div className="flex items-center justify-between">
           <button onClick={() => setMode('select')} className="text-blue-600 text-sm font-medium hover:text-blue-800">
             ← 返回選擇
           </button>
           {sessionScores.length > 0 && (
-            <div className="text-sm text-gray-500">{sessionScores.length} 次練習 · 平均 {avgScore}</div>
+            <div className="text-sm text-gray-500">{sessionScores.length} 次 · 平均 {avgScore}</div>
           )}
+        </div>
+
+        {/* Mode toggle */}
+        <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
+          <button
+            onClick={() => { setPracticeType('sound'); clearTranscript(); }}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+              practiceType === 'sound'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            🔤 單音練習
+          </button>
+          <button
+            onClick={() => { setPracticeType('word'); clearTranscript(); }}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${
+              practiceType === 'word'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            💬 單詞練習
+          </button>
         </div>
 
         {/* Phoneme header */}
@@ -94,22 +126,32 @@ export default function PracticePage() {
           </p>
         </div>
 
-        {/* Target word */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 text-center shadow-sm">
-          <p className="text-sm text-gray-400 mb-2">請跟著唸這個詞：</p>
-          <div className="text-5xl font-bold text-gray-800 mb-2">{targetWord.word}</div>
-          <div className="text-gray-500">{targetWord.meaning}</div>
-          <div className="text-gray-400 text-sm font-mono mt-1">{targetWord.ipa}</div>
-        </div>
+        {/* Target */}
+        {practiceType === 'sound' ? (
+          <div className="bg-white border-2 border-blue-200 rounded-2xl p-6 text-center shadow-sm">
+            <p className="text-sm text-gray-400 mb-2">只需要發出這個音：</p>
+            <div className="text-6xl font-bold text-blue-700 font-mono mb-3">{selectedPhoneme.soundSample}</div>
+            <p className="text-xs text-gray-400">不需要說完整的詞，單獨發這個音就好</p>
+          </div>
+        ) : (
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 text-center shadow-sm">
+            <p className="text-sm text-gray-400 mb-2">請跟著唸這個詞：</p>
+            <div className="text-5xl font-bold text-gray-800 mb-2">{targetWord?.word}</div>
+            <div className="text-gray-500">{targetWord?.meaning}</div>
+            <div className="text-gray-400 text-sm font-mono mt-1">{targetWord?.ipa}</div>
+          </div>
+        )}
 
         {/* TTS Listen */}
         {ttsSupported && (
           <button
-            onClick={() => speak(targetWord.word)}
+            onClick={() => speak(currentTarget)}
             disabled={state === 'speaking'}
             className="w-full py-3 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl font-medium hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2"
           >
-            {state === 'speaking' ? <><span className="animate-pulse">🔊</span> 播放中...</> : <><span>🔊</span> 聆聽標準發音</>}
+            {state === 'speaking'
+              ? <><span className="animate-pulse">🔊</span> 播放中...</>
+              : <><span>🔊</span> {practiceType === 'sound' ? '聆聽這個音' : '聆聽標準發音'}</>}
           </button>
         )}
 
@@ -138,9 +180,7 @@ export default function PracticePage() {
                 <p className="text-2xl font-bold text-gray-800">{transcript}</p>
               </div>
             )}
-
             {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-
             {transcript && state !== 'listening' && (
               <button
                 onClick={handleEvaluate}
@@ -159,7 +199,8 @@ export default function PracticePage() {
     );
   }
 
-  if (mode === 'result' && selectedPhoneme && targetWord) {
+  // ── Result screen ─────────────────────────────────────────────────────────────
+  if (mode === 'result' && selectedPhoneme) {
     const lastResult = sessionScores[sessionScores.length - 1];
     const score = lastResult?.score ?? 0;
     const scoreColor = score >= 80 ? 'text-green-600' : score >= 50 ? 'text-yellow-600' : 'text-red-500';
@@ -186,20 +227,35 @@ export default function PracticePage() {
           </div>
 
           <div className="text-sm text-gray-500 space-y-1 bg-gray-50 rounded-xl p-3 text-left">
-            <p><span className="font-medium">目標詞：</span>{lastResult?.word}</p>
+            <p>
+              <span className="font-medium">目標{practiceType === 'sound' ? '音' : '詞'}：</span>
+              {lastResult?.target}
+            </p>
             {lastResult?.heard && <p><span className="font-medium">識別到：</span>{lastResult.heard}</p>}
             <p className="text-blue-600 font-medium">+{xpEarned} XP 已獲得</p>
           </div>
         </div>
 
-        {/* Session history */}
+        {/* Suggest upgrading to word practice after nailing the sound */}
+        {practiceType === 'sound' && score >= 80 && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+            <p className="text-sm text-green-700 font-medium">單音發得不錯！試試看單詞練習？</p>
+            <button
+              onClick={() => { setPracticeType('word'); clearTranscript(); setMode('practice'); }}
+              className="mt-2 px-4 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+            >
+              切換到單詞練習 →
+            </button>
+          </div>
+        )}
+
         {sessionScores.length > 1 && (
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="font-semibold text-gray-700 text-sm mb-2">本次練習記錄</h3>
             <div className="space-y-1.5">
               {sessionScores.map((r, i) => (
                 <div key={i} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">{r.word}</span>
+                  <span className="text-gray-600">{r.target}</span>
                   <ScoreBadge score={r.score} />
                 </div>
               ))}
@@ -217,7 +273,7 @@ export default function PracticePage() {
             onClick={handleNext}
             className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors"
           >
-            下一個詞 →
+            {practiceType === 'sound' ? '再練一次' : '下一個詞'} →
           </button>
           <button
             onClick={() => { clearTranscript(); setMode('practice'); }}
@@ -230,12 +286,18 @@ export default function PracticePage() {
     );
   }
 
-  // Select mode
+  // ── Select screen ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">發音練習</h1>
-        <p className="text-gray-500 mt-1">選擇一個音素，用 AI 語音評估你的發音</p>
+        <p className="text-gray-500 mt-1">選擇一個音素開始練習，新手建議從「單音練習」開始</p>
+      </div>
+
+      {/* Beginner tip */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex gap-2 text-sm text-blue-800">
+        <span className="text-lg">💡</span>
+        <span>第一次練習時會自動進入<strong>單音練習</strong>模式，只需要發出單一音素，不需要說完整的詞！</span>
       </div>
 
       {/* Filter */}
@@ -265,6 +327,7 @@ export default function PracticePage() {
         {filteredPhonemes.map((phoneme) => {
           const count = getPracticeCount(phoneme.id);
           const lastScore = getLastScore(phoneme.id);
+          const isNew = count === 0;
           return (
             <button
               key={phoneme.id}
@@ -275,13 +338,20 @@ export default function PracticePage() {
                 <span className="text-xl font-bold text-blue-700 font-mono bg-blue-50 px-2 py-0.5 rounded-lg">
                   {phoneme.symbol}
                 </span>
-                {lastScore !== null && <ScoreBadge score={lastScore} />}
+                <div className="flex items-center gap-1">
+                  {isNew && (
+                    <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full font-medium">新</span>
+                  )}
+                  {lastScore !== null && <ScoreBadge score={lastScore} />}
+                </div>
               </div>
               <p className="font-medium text-gray-800 text-sm">{phoneme.name}</p>
               <p className="text-xs text-gray-400 mt-0.5">{phoneme.lessonTitle}</p>
-              {count > 0 && (
-                <p className="text-xs text-gray-400 mt-1">已練習 {count} 次</p>
-              )}
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-xs text-gray-300">單音：</span>
+                <span className="text-xs font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{phoneme.soundSample}</span>
+                {count > 0 && <span className="text-xs text-gray-400">· 練習 {count} 次</span>}
+              </div>
             </button>
           );
         })}
