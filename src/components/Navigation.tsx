@@ -1,9 +1,7 @@
 'use client';
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useProgress } from '@/hooks/useProgress';
-import { createClient } from '@/lib/supabase';
 
 const navItems = [
   { href: '/', label: '首頁', icon: '🏠' },
@@ -14,27 +12,7 @@ const navItems = [
 
 export default function Navigation() {
   const pathname = usePathname();
-  const router = useRouter();
   const { todayXP, dailyGoal, goalProgress, goalReached } = useProgress();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUserEmail(user?.email ?? null);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUserEmail(session?.user?.email ?? null);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push('/login');
-    router.refresh();
-  };
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -63,7 +41,6 @@ export default function Navigation() {
           </nav>
 
           <div className="flex items-center gap-2 text-sm">
-            {/* XP progress bar */}
             <div className="hidden sm:flex items-center gap-1">
               <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div
@@ -75,28 +52,6 @@ export default function Navigation() {
                 {todayXP}/{dailyGoal} XP
               </span>
             </div>
-
-            {/* User auth */}
-            {userEmail ? (
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">
-                  {userEmail[0].toUpperCase()}
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="hidden sm:block text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  登出
-                </button>
-              </div>
-            ) : (
-              <Link
-                href="/login"
-                className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-blue-700 transition-colors"
-              >
-                登入
-              </Link>
-            )}
           </div>
         </div>
       </div>

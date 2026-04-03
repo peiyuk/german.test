@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { UserProgress } from '@/data/types';
-import { createClient } from '@/lib/supabase';
 import {
   getProgress,
   getTodayXP,
@@ -13,44 +12,27 @@ import {
 
 export function useProgress() {
   const [progress, setProgress] = useState<UserProgress | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    const supabase = createClient();
-
-    // Load current session
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const uid = user?.id ?? null;
-      setUserId(uid);
-      getProgress(uid).then(setProgress);
-    });
-
-    // Listen for auth changes (login / logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const uid = session?.user?.id ?? null;
-      setUserId(uid);
-      getProgress(uid).then(setProgress);
-    });
-
-    return () => subscription.unsubscribe();
+    getProgress().then(setProgress);
   }, []);
 
   const markLessonComplete = useCallback(async (lessonId: string, xp: number) => {
-    const updated = await completeLesson(lessonId, xp, userId);
+    const updated = await completeLesson(lessonId, xp);
     setProgress(updated);
     return updated;
-  }, [userId]);
+  }, []);
 
   const addPracticeScore = useCallback(async (phonemeId: string, score: number) => {
-    const updated = await recordPractice(phonemeId, score, userId);
+    const updated = await recordPractice(phonemeId, score);
     setProgress(updated);
     return updated;
-  }, [userId]);
+  }, []);
 
   const updateDailyGoal = useCallback(async (goal: number) => {
-    const updated = await setDailyGoal(goal, userId);
+    const updated = await setDailyGoal(goal);
     setProgress(updated);
-  }, [userId]);
+  }, []);
 
   const currentProgress = progress ?? defaultProgress;
   const todayXP = getTodayXP(currentProgress);
@@ -60,7 +42,7 @@ export function useProgress() {
 
   return {
     progress,
-    userId,
+    userId: null,
     todayXP,
     dailyGoal,
     goalProgress,

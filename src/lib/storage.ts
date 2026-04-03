@@ -1,5 +1,4 @@
 import { UserProgress } from '@/data/types';
-import { createClient } from '@/lib/supabase';
 
 const STORAGE_KEY = 'german_learning_progress';
 
@@ -31,53 +30,13 @@ function saveLocal(p: UserProgress): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
 }
 
-// ── Supabase helpers ──────────────────────────────────────────────────────────
+// ── Public API ────────────────────────────────────────────────────────────────
 
-async function getSupabaseProgress(userId: string): Promise<UserProgress> {
-  const supabase = createClient();
-  const { data } = await supabase
-    .from('user_progress')
-    .select('*')
-    .eq('user_id', userId)
-    .single();
-  if (!data) return defaultProgress;
-  return {
-    completedLessons: data.completed_lessons ?? [],
-    practicedPhonemes: data.practiced_phonemes ?? {},
-    dailyXP: data.daily_xp ?? {},
-    totalXP: data.total_xp ?? 0,
-    streak: data.streak ?? 0,
-    lastStudied: data.last_studied ?? null,
-    dailyGoal: data.daily_goal ?? 100,
-    practiceScores: data.practice_scores ?? {},
-  };
-}
-
-async function saveSupabaseProgress(userId: string, p: UserProgress): Promise<void> {
-  const supabase = createClient();
-  await supabase.from('user_progress').upsert({
-    user_id: userId,
-    completed_lessons: p.completedLessons,
-    practiced_phonemes: p.practicedPhonemes,
-    daily_xp: p.dailyXP,
-    total_xp: p.totalXP,
-    streak: p.streak,
-    last_studied: p.lastStudied,
-    daily_goal: p.dailyGoal,
-    practice_scores: p.practiceScores,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'user_id' });
-}
-
-// ── Public API (auto-detects auth state) ─────────────────────────────────────
-
-export async function getProgress(userId?: string | null): Promise<UserProgress> {
-  if (userId) return getSupabaseProgress(userId);
+export async function getProgress(): Promise<UserProgress> {
   return getLocal();
 }
 
-export async function saveProgress(p: UserProgress, userId?: string | null): Promise<void> {
-  if (userId) await saveSupabaseProgress(userId, p);
+export async function saveProgress(p: UserProgress): Promise<void> {
   saveLocal(p);
 }
 
@@ -89,8 +48,8 @@ export function getTodayXP(progress: UserProgress): number {
   return progress.dailyXP[getTodayKey()] ?? 0;
 }
 
-export async function completeLesson(lessonId: string, xp: number, userId?: string | null): Promise<UserProgress> {
-  const progress = await getProgress(userId);
+export async function completeLesson(lessonId: string, xp: number): Promise<UserProgress> {
+  const progress = await getProgress();
   if (progress.completedLessons.includes(lessonId)) return progress;
   const today = getTodayKey();
   const todayXP = (progress.dailyXP[today] ?? 0) + xp;
@@ -112,12 +71,12 @@ export async function completeLesson(lessonId: string, xp: number, userId?: stri
     streak,
     lastStudied: today,
   };
-  await saveProgress(updated, userId);
+  await saveProgress(updated);
   return updated;
 }
 
-export async function recordPractice(phonemeId: string, score: number, userId?: string | null): Promise<UserProgress> {
-  const progress = await getProgress(userId);
+export async function recordPractice(phonemeId: string, score: number): Promise<UserProgress> {
+  const progress = await getProgress();
   const existing = progress.practiceScores[phonemeId] ?? [];
   const practicedCount = (progress.practicedPhonemes[phonemeId] ?? 0) + 1;
   const xpEarned = score >= 80 ? 10 : score >= 50 ? 5 : 2;
@@ -132,14 +91,14 @@ export async function recordPractice(phonemeId: string, score: number, userId?: 
     totalXP: progress.totalXP + xpEarned,
     lastStudied: today,
   };
-  await saveProgress(updated, userId);
+  await saveProgress(updated);
   return updated;
 }
 
-export async function setDailyGoal(goal: number, userId?: string | null): Promise<UserProgress> {
-  const progress = await getProgress(userId);
+export async function setDailyGoal(goal: number): Promise<UserProgress> {
+  const progress = await getProgress();
   const updated = { ...progress, dailyGoal: goal };
-  await saveProgress(updated, userId);
+  await saveProgress(updated);
   return updated;
 }
 
